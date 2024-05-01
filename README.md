@@ -14,14 +14,11 @@ In this book chapter, the focus is to employ the methods (PCA, PLS, AS, gKDR, gK
 
 ## Second Stage
 
-For the second phase, we used the reduced inputs to fit our GPR. The same training set is utilized to fit the model and employ the test set to make predictions. We measured the predictive performance using root mean square error prediction (RMSEP).
+For the second phase, we used the reduced inputs to fit our GPR. The same training set is utilized to fit the model and employ the test set to make predictions. We measured the predictive performance using root mean square prediction error (RMSPE).
 
 
 # Codes Usage
  
- ## Train_data
-
- This folder contains the train set to do the dimension reduction
 
  ## gKDR-Codes
 
