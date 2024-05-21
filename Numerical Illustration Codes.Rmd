@@ -764,7 +764,6 @@ X66=Data6$datatrain[, -11] %>% as.matrix()
 ```
 
 
-
 ```{r}
 set.seed(1000)
 
