@@ -1003,6 +1003,7 @@ gv6data =read.csv("project6Ngv.csv")%>% as.matrix()
 gv1_r = read.csv("W1_1.csv")%>% as.matrix()
 gv2_r = read.csv("W2_1.csv")%>% as.matrix()
 gv3_r = read.csv("W3_1.csv")%>% as.matrix()
+
 ```
 
 
@@ -1143,14 +1144,14 @@ Discrepancy_gi6data  = c(Kernel=kernel_method(W=gi6data, W_0=B),
 
 
 #gKDR -v
-Discrepancy_gv6data = c(Kernel=kernel_method(W=gv1_r, W_0=B),
+Discrepancy_gv2data = c(Kernel=kernel_method(W=gv1_r, W_0=B),
                     gKDR_=gKDR_method(W=gv1_r, W_0=B), 
                     Li=Li_and_Chiaromonte_method(W=gv1_r, W_0=B), 
                     Wang=Wang_method(W=gv1_r, W_0=B), 
                     Ferr=Ferr_method(W=gv1_r, W_0=B),
                     Pal=Relative_error(W=gv1_r, W_0=B))
 
-Discrepancy_gv6data= c(Kernel=kernel_method(W=gv2_r, W_0=B),
+Discrepancy_gv4data= c(Kernel=kernel_method(W=gv2_r, W_0=B),
                     gKDR_=gKDR_method(W=gv2_r, W_0=B), 
                     Li=Li_and_Chiaromonte_method(W=gv2_r, W_0=B), 
                     Wang=Wang_method(W=gv2_r, W_0=B), 
@@ -1229,7 +1230,7 @@ toc <- proc.time()[3]
 toc - tic
 
 tic <- proc.time()[3]
-pcaSr4= DimRed(X=resultsPCA4$x[,1:7], y=Data4$datatrain[, 11] %>% as.matrix(), 
+pcaSr4= DimRed(X=resultsPCA4$x[,1:8], y=Data4$datatrain[, 11] %>% as.matrix(), 
                XX=Data4$datatest[,-11] %>% as.matrix() %*% resultsPCA4$rotation[, 1:8], 
                yytrue=Data4$yytrue%>% as.matrix())
 toc <- proc.time()[3]
@@ -1237,7 +1238,7 @@ toc - tic
 
 
 tic <- proc.time()[3]
-pcaSr6= DimRed(X=resultsPCA6$x[,1:6], y=Data6$datatrain[, 11] %>% as.matrix(), 
+pcaSr6= DimRed(X=resultsPCA6$x[,1:8], y=Data6$datatrain[, 11] %>% as.matrix(), 
                XX=Data6$datatest[,-11] %>% as.matrix() %*% resultsPCA6$rotation[, 1:8], 
                yytrue=Data6$yytrue%>% as.matrix())
 toc <- proc.time()[3]
