@@ -1307,17 +1307,17 @@ toc <- proc.time()[3]
 toc - tic
 
 tic <- proc.time()[3]
-actr4=DimRed(X=X44 %>% as.matrix() %*% W2[, 1], 
+actr4=DimRed(X=X44 %>% as.matrix() %*% W4[, 1], 
              y=Data4$datatrain[, 11] %>% as.matrix(), 
-             XX=Data4$datatest[,-11] %>% as.matrix() %*% W2[, 1], 
+             XX=Data4$datatest[,-11] %>% as.matrix() %*% W4[, 1], 
              yytrue=Data4$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
 tic <- proc.time()[3]
-actr6=DimRed(X=X66 %>% as.matrix() %*% W2[, 1], 
+actr6=DimRed(X=X66 %>% as.matrix() %*% W6[, 1], 
              y=Data6$datatrain[, 11] %>% as.matrix(), 
-             XX=Data6$datatest[,-11] %>% as.matrix() %*% W2[, 1], 
+             XX=Data6$datatest[,-11] %>% as.matrix() %*% W6[, 1], 
              yytrue=Data6$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
