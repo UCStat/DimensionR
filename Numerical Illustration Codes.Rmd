@@ -87,12 +87,11 @@ return(-c(dlltheta, dllg))
 }
 
 
-score <- function(Y, mu, Sigma, mah=FALSE)
+scoreV <- function(Y, mu, Sigma, Sigmai)
 {
-Ymmu <- Y - mup2
-Sigmai <- solve(Sigma)
+Ymmu <- Y - mu
 mahdist <- t(Ymmu) %*% Sigmai %*% Ymmu
-if(mah) return(sqrt(mahdist))
+
 return (- determinant(Sigma, logarithm=TRUE)$modulus - mahdist)
 }
 
@@ -125,18 +124,19 @@ Sigmai <- solve(Sigmap2)
 #Different comparison metric 
 
 #Root-mean-square error
-RMSE=sqrt(mean(Ymmu^2))
+RMSPE=sqrt(mean(Ymmu^2))
 
 #Root mean square error adjusted by covariance
 mahdist <- t(Ymmu) %*% Sigmai %*% Ymmu
-RMSE_adj_cov=sqrt(mahdist)
+RMSPE_adj_cov=sqrt(mahdist)
 
 
 #Score which gives account of the magnitude of uncertainty and error accounted by the prediction
-score_value=-determinant(Sigmap2, logarithm=TRUE)$modulus - mahdist
+#score_value= -determinant(Sigmap2, logarithm=TRUE)$modulus - mahdist
+score_value <- scoreV(Y=yytrue, mu=mup2, Sigma=Sigmap2, Sigmai=Sigmai)
 
 #Normalized predictive root-mean-square-error(PRMSE)
-Normalized_PRMSE=RMSE/(max(y)-min(y))
+Normalized_PRMSE=RMSPE/(max(y)-min(y))
 
 #we compute NSME
 Nnsme = sum(Ymmu^2)
@@ -203,12 +203,18 @@ for (i in 1:num_obs) {
 crps_score <- compute_crps(observed=observed_values, mean=mean_values, std_dev=std_dev_values)
 
 
-metric=c(RMSPE=RMSE,NSME=NSME,coverage_prob=coverage_prob, ALCI=average_length, CRPS=crps_score, RMSE_adj_cov=RMSE_adj_cov,  Normalized_PRMSE=Normalized_PRMSE, score_value=score_value)
+# metric=c(RMSPE=RMSPE,NSME=NSME,coverage_prob=coverage_prob, 
+#          ALCI=average_length, CRPS=crps_score, RMSPE_adj_cov=RMSPE_adj_cov,  
+#          Normalized_PRMSE=Normalized_PRMSE, m_uncertainty=-determinant(Sigmap2, logarithm=TRUE)$modulus, 
+#          score_value=score_value)
+
+metric=c(RMSPE=RMSPE,NSME=NSME,coverage_prob=coverage_prob, 
+         ALCI=average_length, CRPS=crps_score,  
+         score_value=score_value)
 
 return(metric)
 
 }
-
 
 # mylhs <- function(n, d)
 # {
@@ -294,7 +300,201 @@ return(list(data=data,datatrain=datatrain,datatest=datatest, yytrue=yytrue, trai
 }
 
 
+Frobenius_norm =function(A){
+ D=ncol(A)
+ d=nrow(A)
+ Fnorm=0
+ for(i in 1:d){
+   for(j in 1:D){
+     Fnorm = Fnorm + (A[i, j])^2
+   }
+   
+ }
+  
+ return(sqrt(Fnorm))
 
+}
+
+#By Kenji Fukumizu, Francis R. Bach and Michael I. Jordan
+#KERNEL DIMENSION REDUCTION IN REGRESSION
+kernel_method = function(W, W_0){
+  
+  Discrep= W_0 %*% t(W_0) -  W %*% t(W) 
+  
+  return(Frobenius_norm(Discrep))
+}
+
+# W=simPls4$projection[, 1] %>% as.matrix()
+# W_0=B
+#Kenji Fukumizu and Chenlei Leng 2013
+#Gradient-based kernel dimension reduction for regression
+gKDR_method = function(W, W_0){
+  D=ncol(W)
+  d=nrow(W)
+  
+  #if(D=1)
+  Discrep =  W_0 %*% t(W_0)  %*% (diag(d) - W %*% t(W))
+  
+  return(Frobenius_norm(Discrep)/sqrt(D))
+}
+
+
+#Li, Zha, and Chiaromonte,2005
+#Contour regression: a general approach to dimension reduction
+Li_and_Chiaromonte_method= function(W, W_0){
+  
+  P_0 = W_0 %*% solve(t(W_0) %*% W_0) %*% t(W_0) 
+  P = W %*% solve(t(W) %*% W) %*% t(W) 
+  
+  return(sum(diag((P-P_0) %*% (P-P_0))))
+}
+
+
+#B. Li and S. Wang. 2007
+#On directional regression for dimension reduction
+
+Wang_method= function(W, W_0){
+  
+  P_0 = W_0 %*% solve(t(W_0) %*% W_0) %*% t(W_0) 
+  P = W %*% solve(t(W) %*% W) %*% t(W) 
+  
+  return(Frobenius_norm((P-P_0) %*% (P-P_0)))
+}
+
+
+#Ferr´e, L. (1998), 
+#Determining the dimension in sliced inverse 
+# W=resultsPCA2$rotation[, 1:8]
+# W_0=B
+Ferr_method = function(W, W_0){
+  D=ncol(W_0)
+  Discrep=solve(t(W_0) %*% W_0) %*% (t(W_0) %*% W) %*% (solve(t(W) %*% W) %*% (t(W) %*% W_0) )
+  
+  return(sum(diag(Discrep))/D)
+}
+
+#Pal, S.; Sengupta, S.; Mitra, R.; Banerjee, A. 
+#Conjugate Priors and Posterior Inference for the Matrix Langevin Distribution on the Stiefel Manifold.
+
+Relative_error = function(W, W_0){
+  DW=W - W_0
+  Frob_D = Frobenius_norm(DW)
+  Frob_W_0 = Frobenius_norm(W_0)
+  rlative=Frob_D/Frob_W_0
+  
+  return(rlative)
+} 
+
+
+```
+
+
+
+```{r}
+#when W is random and other parameters are fixed
+set.seed(1000)
+
+d=10
+
+N=c(150, 350, 600)
+
+#b1 = c(-0.0091, -0.0579, -0.1877, 0.4774, 0.4559, -0.6714, -0.1264, -0.0082, 0.0724, -0.2308) %>% as.matrix()
+bRW=matrix(c(rep(0, 10)), ncol = 1)
+for (i in 1:10) {
+  bRW[i, ]= rnorm(1)
+}
+
+
+a = -0.16113;
+b= -0.97483;
+Gamma = -1.66526
+
+#B = matrix(b1, nrow = d, ncol = 1)
+
+
+#Perturbation
+e2=matrix(rnorm(N[1],0, 0.1^2), nrow = N[1])
+e4=matrix(rnorm(N[2], 0, 0.1^2), nrow = N[2])
+e6=matrix(rnorm(N[3], 0, 0.1^2), nrow = N[3])
+
+
+DataRW2=fried(n=N[1],d=10, a=a, b=b, Gamma=Gamma, B_0=b1, e=e2)
+DataRW4=fried(n=N[2],d=10, a=a, b=b, Gamma=Gamma, B_0=bRW, e=e4)
+DataRW6=fried(n=N[3],d=10, a=a, b=b, Gamma=Gamma, B_0=bRW, e=e6)
+
+write.csv(DataRW2$trainX, file="trainXRW2.csv", row.names = FALSE)
+write.csv(DataRW2$trainY, file="trainYRW2.csv", row.names = FALSE)
+write.csv(DataRW2$testX, file="testXRW2.csv", row.names = FALSE)
+write.csv(DataRW2$testY, file="testYRW2.csv", row.names = FALSE)
+
+
+write.csv(DataRW4$trainX, file="trainXRW4.csv", row.names = FALSE)
+write.csv(DataRW4$trainY, file="trainYRW4.csv", row.names = FALSE)
+write.csv(DataRW4$testX, file="testXRW4.csv", row.names = FALSE)
+write.csv(DataRW4$testY, file="testYRW4.csv", row.names = FALSE)
+
+
+write.csv(DataRW6$trainX, file="trainXRW6.csv", row.names = FALSE)
+write.csv(DataRW6$trainY, file="trainYRW6.csv", row.names = FALSE)
+write.csv(DataRW6$testX, file="testXRW6.csv", row.names = FALSE)
+write.csv(DataRW6$testY, file="testYRW6.csv", row.names = FALSE)
+```
+
+
+
+```{r}
+# W is fixed and other parameters are random
+set.seed(1000)
+
+d=10
+
+N=c(150, 350, 600)
+
+b1 = c(-0.0091, -0.0579, -0.1877, 0.4774, 0.4559, -0.6714, -0.1264, -0.0082, 0.0724, -0.2308)
+# bRW=matrix(c(rep(0, 10)), ncol = 1)
+# for (i in 1:10) {
+#   bRW[i, ]= rnorm(1)
+# }
+
+
+# a = -0.16113;
+# b= -0.97483;
+# Gamma = -1.66526
+
+a = rnorm(1);
+b= rnorm(1);
+Gamma = rnorm(1)
+
+B = matrix(b1, nrow = d, ncol = 1)
+
+
+
+#Perturbation
+e2=matrix(rnorm(N[1],0, 0.1^2), nrow = N[1])
+e4=matrix(rnorm(N[2], 0, 0.1^2), nrow = N[2])
+e6=matrix(rnorm(N[3], 0, 0.1^2), nrow = N[3])
+
+
+DataFW2=fried(n=N[1],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e2)
+DataFW4=fried(n=N[2],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e4)
+DataFW6=fried(n=N[3],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e6)
+
+write.csv(DataFW2$trainX, file="trainXFW2.csv", row.names = FALSE)
+write.csv(DataFW2$trainY, file="trainYFW2.csv", row.names = FALSE)
+write.csv(DataFW2$testX, file="testXFW2.csv", row.names = FALSE)
+write.csv(DataFW2$testY, file="testYFW2.csv", row.names = FALSE)
+
+
+write.csv(DataFW4$trainX, file="trainXFW4.csv", row.names = FALSE)
+write.csv(DataFW4$trainY, file="trainYFW4.csv", row.names = FALSE)
+write.csv(DataFW4$testX, file="testXFW4.csv", row.names = FALSE)
+write.csv(DataFW4$testY, file="testYFW4.csv", row.names = FALSE)
+
+
+write.csv(DataFW6$trainX, file="trainXFW6.csv", row.names = FALSE)
+write.csv(DataFW6$trainY, file="trainYFW6.csv", row.names = FALSE)
+write.csv(DataFW6$testX, file="testXFW6.csv", row.names = FALSE)
+write.csv(DataFW6$testY, file="testYFW6.csv", row.names = FALSE)
 ```
 
 
@@ -302,8 +502,67 @@ return(list(data=data,datatrain=datatrain,datatest=datatest, yytrue=yytrue, trai
 
 
 ```{r}
+#when W and other parameters are random
+set.seed(1000)
+
+d=10
+
+N=c(150, 350, 600)
+
+# #b1 = c(-0.0091, -0.0579, -0.1877, 0.4774, 0.4559, -0.6714, -0.1264, -0.0082, 0.0724, -0.2308)
+# bRW=matrix(c(rep(0, 10)), ncol = 1)
+# for (i in 1:10) {
+#   bRW[i, ]= rnorm(1)
+# }
 
 
+# a = -0.16113;
+# b= -0.97483;
+# Gamma = -1.66526
+
+a = rnorm(1);
+b= rnorm(1);
+Gamma = rnorm(1)
+
+# B = matrix(b1, nrow = d, ncol = 1)
+# 
+# B=bRW
+# B %>% as.vector()
+#Perturbation
+e2=matrix(rnorm(N[1],0, 0.1^2), nrow = N[1])
+e4=matrix(rnorm(N[2], 0, 0.1^2), nrow = N[2])
+e6=matrix(rnorm(N[3], 0, 0.1^2), nrow = N[3])
+
+
+DataRRW2=fried(n=N[1],d=10, a=a, b=b, Gamma=Gamma, B_0=bRW, e=e2)
+DataRRW4=fried(n=N[2],d=10, a=a, b=b, Gamma=Gamma, B_0=bRW, e=e4)
+DataRRW6=fried(n=N[3],d=10, a=a, b=b, Gamma=Gamma, B_0=bRW, e=e6)
+
+write.csv(DataRRW2$trainX, file="trainXRRW2.csv", row.names = FALSE)
+write.csv(DataRRW2$trainY, file="trainYRRW2.csv", row.names = FALSE)
+write.csv(DataRRW2$testX, file="testXRRW2.csv", row.names = FALSE)
+write.csv(DataRRW2$testY, file="testYRRW2.csv", row.names = FALSE)
+
+
+write.csv(DataRRW4$trainX, file="trainXRRW4.csv", row.names = FALSE)
+write.csv(DataRRW4$trainY, file="trainYRRW4.csv", row.names = FALSE)
+write.csv(DataRRW4$testX, file="testXRRW4.csv", row.names = FALSE)
+write.csv(DataRRW4$testY, file="testYRRW4.csv", row.names = FALSE)
+
+
+write.csv(DataRRW6$trainX, file="trainXRRW6.csv", row.names = FALSE)
+write.csv(DataRRW6$trainY, file="trainYRRW6.csv", row.names = FALSE)
+write.csv(DataRRW6$testX, file="testXRRW6.csv", row.names = FALSE)
+write.csv(DataRRW6$testY, file="testYRRW6.csv", row.names = FALSE)
+
+```
+
+
+
+
+```{r}
+
+#Simulate data
 set.seed(1000)
 
 d=10
@@ -330,22 +589,22 @@ Data2=fried(n=N[1],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e2)
 Data4=fried(n=N[2],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e4)
 Data6=fried(n=N[3],d=10, a=a, b=b, Gamma=Gamma, B_0=B, e=e6)
 
-write.csv(Data2$trainX, file="trainX2.csv", row.names = FALSE)
-write.csv(Data2$trainY, file="trainY2.csv", row.names = FALSE)
-write.csv(Data2$testX, file="testX2.csv", row.names = FALSE)
-write.csv(Data2$testY, file="testY2.csv", row.names = FALSE)
+write.csv(Data2$trainX, file="trainX22.csv", row.names = FALSE)
+write.csv(Data2$trainY, file="trainY22.csv", row.names = FALSE)
+#write.csv(Data2$testX, file="testX2.csv", row.names = FALSE)
+#write.csv(Data2$testY, file="testY2.csv", row.names = FALSE)
 
 
-write.csv(Data4$trainX, file="trainX4.csv", row.names = FALSE)
-write.csv(Data4$trainY, file="trainY4.csv", row.names = FALSE)
-write.csv(Data4$testX, file="testX4.csv", row.names = FALSE)
-write.csv(Data4$testY, file="testY4.csv", row.names = FALSE)
+write.csv(Data4$trainX, file="trainX44.csv", row.names = FALSE)
+write.csv(Data4$trainY, file="trainY44.csv", row.names = FALSE)
+#write.csv(Data4$testX, file="testX4.csv", row.names = FALSE)
+#write.csv(Data4$testY, file="testY4.csv", row.names = FALSE)
 
 
-write.csv(Data6$trainX, file="trainX6.csv", row.names = FALSE)
-write.csv(Data6$trainY, file="trainY6.csv", row.names = FALSE)
-write.csv(Data6$testX, file="testX6.csv", row.names = FALSE)
-write.csv(Data6$testY, file="testY6.csv", row.names = FALSE)
+write.csv(Data6$trainX, file="trainX66.csv", row.names = FALSE)
+write.csv(Data6$trainY, file="trainY66.csv", row.names = FALSE)
+#write.csv(Data6$testX, file="testX6.csv", row.names = FALSE)
+#write.csv(Data6$testY, file="testY6.csv", row.names = FALSE)
 ```
 
 
@@ -353,50 +612,16 @@ write.csv(Data6$testY, file="testY6.csv", row.names = FALSE)
 
 
 
-```{r}
-# Load required libraries
-library(ggplot2)
-library(ggrepel)  # For better label placement
-
-graph_eigen=function(eigenvalues){
-# Calculate cumulative sum and convert to percentage of total
-eigenvalues_df <- data.frame(
-  Eigenvalue = eigenvalues,
-  Component = 1:length(eigenvalues)
-)
-eigenvalues_df$CumulativePercentage <- cumsum(eigenvalues_df$Eigenvalue) / sum(eigenvalues_df$Eigenvalue) * 100
-
-# Create a scree plot with optimized y-axis and label placements
-scree_plot <- ggplot(eigenvalues_df, aes(x = Component, y = CumulativePercentage)) +
-  geom_line() +  # Add a line graph
-  geom_point() +  # Add points to the graph
-  geom_text_repel(  # Use ggrepel for better label management
-    aes(label = sprintf("%.2f%%", CumulativePercentage)),
-    nudge_y = 2,  # Nudge labels upward for clarity
-    size = 3,  # Adjust text size if necessary
-    box.padding = unit(0.35, "lines"),  # Add padding around text
-    point.padding = unit(0.3, "lines")  # Add padding around points
-  ) +
-  labs(x = "Principal Component",
-       y = "Cumulative Percentage (%)") +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5)) +  # Center the plot title
-  scale_x_continuous(breaks = 1:10, labels = 1:10) +  # Define x-axis breaks and labels from 1 to 10
-  scale_y_continuous(limits = c(0, 110), expand = c(0, 0))  # Adjust y-axis to show 0% to slightly above 100%
-
-# Display the plot
-return(print(scree_plot))
-}
-
-```
 
 
+
+# PCA
 
 ```{r}
 
 
 set.seed(1000)
-
+# A case of using 120 training size
 tic <- proc.time()[3]
 resultsPCA2 <- prcomp(Data2$datatrain[, -11], scale = TRUE)
 summary(resultsPCA2)
@@ -409,7 +634,7 @@ fviz_eig(resultsPCA2,
 toc <- proc.time()[3]
 toc - tic
 
-graph_eigen((resultsPCA2$sdev)^2)
+#graph_eigen((resultsPCA2$sdev)^2)
 
 # fviz_eig(resultsPCA2 , 
 #          addlabels = TRUE, 
@@ -417,6 +642,7 @@ graph_eigen((resultsPCA2$sdev)^2)
 #          main="Figure 5: Scree Plot")
 
 
+# A case of using 280 training size
 tic <- proc.time()[3]
 resultsPCA4 <- prcomp(Data4$datatrain[, -11], scale = TRUE)
 fviz_eig(resultsPCA4,
@@ -429,8 +655,10 @@ summary(resultsPCA4)
 toc <- proc.time()[3]
 toc - tic
 
-graph_eigen((resultsPCA4$sdev)^2)
+#graph_eigen((resultsPCA4$sdev)^2)
 
+
+# A case of using 480 training size
 tic <- proc.time()[3]
 resultsPCA6 <- prcomp(Data6$datatrain[, -11], scale = TRUE)
 fviz_eig(resultsPCA6,
@@ -443,49 +671,17 @@ summary(resultsPCA6)
 toc <- proc.time()[3]
 toc-tic
 
-graph_eigen((resultsPCA6$sdev)^2)
+#graph_eigen((resultsPCA6$sdev)^2)
 ```
 
 
-```{r}
-# Load the ggplot2 library
-library(ggplot2)
-
-# Create a data frame with your data
-data <- data.frame(
-  PrincipalComponent = 1:10,  # Principal Components from 1 to 10
-  RMSEP_or_CV_error = c(2.911453, 2.925995, 2.927791, 2.930371, 2.930800, 
-                        2.930871, 2.930872, 2.930872, 2.930872, 2.930872)  # Your data points
-)
-
-# Create the plot
-plot <- ggplot(data, aes(x = PrincipalComponent, y = RMSEP_or_CV_error)) +
-  geom_line() +  # Connect points with a line
-  geom_point() +  # Show points on the plot
-  # geom_text_repel(  # Use ggrepel for better label management
-  #   aes(label = sprintf("%.6f", RMSEP_or_CV_error)),
-  #   nudge_y = 2,  # Nudge labels upward for clarity
-  #   size = 3,  # Adjust text size if necessary
-  #   box.padding = unit(0.35, "lines"),  # Add padding around text
-  #   point.padding = unit(0.3, "lines")  # Add padding around points
-  # ) +
-  labs(x = "Principal Component", y = "RMSEP or CV_error") +
-  theme_minimal() + # Use a minimal theme
-  scale_x_continuous(breaks = 1:10, labels = 1:10) 
-
-# Print the plot
-print(plot)
-
-```
-
-
-
-
+# PLS
 
 ```{r}
 
 set.seed(1000)
 
+# A case of using 120 training size
 tic <- proc.time()[3]
 simPls2 <- plsr(y ~ . , ncomp = 10, data = Data2$datatrain %>% as.data.frame(),  
                 scale = TRUE, validation = "LOO")
@@ -493,13 +689,13 @@ summary(simPls2)
 plot(RMSEP(simPls2))
 cv2=RMSEP(simPls2)
 adjcv2=cv2$val[estimate= "adjCV", , ][-1] %>% as.vector()
-
 best.dims2 <- which.min(cv2$val[estimate= "adjCV", , ]) - 1
 best.dims2
 toc <- proc.time()[3]
 toc - tic
 
 
+# A case of using 280 training size
 tic <- proc.time()[3]
 simPls4 <- plsr(y ~ . , ncomp = 10, data = Data4$datatrain %>% as.data.frame(),
                 scale = TRUE, validation = "LOO")
@@ -512,7 +708,7 @@ best.dims4
 toc <- proc.time()[3]
 toc -tic
 
-
+# A case of using 480 training size
 tic <- proc.time()[3]
 simPls6 <- plsr(y ~ . , ncomp = 10, data = Data6$datatrain %>% as.data.frame(),
                 scale = TRUE, validation = "LOO")
@@ -528,89 +724,661 @@ toc - tic
 
 
 
+# AS
 
 ```{r}
-tic <- proc.time()[3]
-X22 = scale(Data2$datatrain[, -11] %>% as.matrix())
-N2=nrow(X22)
-gradF2=matrix(rep(NA, N2*d), ncol = d)
-for (m in 1:d) {
-gradF2[, m] = b * B[m, ] + 2 * Gamma * B[m, ]^2 * X22[, m]
+# Define the function to calculate gradient
+compute_gradient <- function(x, W, Beta, F) {
+  Beta_W_T <- as.vector(t(Beta) %*% t(W))  # Ensure proper dimensions
+  W_F_W_T <- 2 * W %*% F %*% t(W)          # Correct matrix multiplication
+  gradient <- Beta_W_T + W_F_W_T %*% x     # Combine results
+  return(gradient)
 }
-C_sum2=list()
 
-for (k in 1:N2) {
-C_sum2[[k]]= gradF2[k,] %>% as.matrix() %*% t(gradF2[k, ])
+# Calculate the gradient and H_hat
+calculate_H_hat <- function(X, W, Beta, F) {
+  n <- nrow(X)
+  p <- ncol(X)
+  
+  # Initialize H_hat
+  H_hat <- matrix(0, nrow = p, ncol = p)
+  grad_hat <- matrix(0, nrow = n, ncol = p)
+  
+  for (i in 1:n) {
+    x_i <- matrix(X[i, ], ncol = 1)  # Ensure x_i is a column vector
+    grad_y_i <- compute_gradient(x_i, W, Beta, F)
+    H_hat <- H_hat + grad_y_i %*% t(grad_y_i)
+    grad_hat[i, ] = grad_y_i 
+  }
+  
+  H_hat <- H_hat / n
+  cov_grad= cov(grad_hat)
+  return(list(H_hat=H_hat, cov_grad=cov_grad, grad_hat=grad_hat))
 }
-list_sum2 <- Reduce("+",C_sum2)                  # Calculate sum of matrices
-estimated_C2 = (1/N2) * list_sum2
-DecompC2=eigen(estimated_C2)
-AD2=DecompC2$values/sum(DecompC2$values)
-Pvariation2 = ProVariation(eignevalues = DecompC2$values)
+
+
+X22=Data2$datatrain[, -11] %>% as.matrix()
+X44=Data4$datatrain[, -11] %>% as.matrix()
+X66=Data6$datatrain[, -11] %>% as.matrix()
+
+```
+
+
+
+```{r}
+set.seed(1000)
+
+# A case of using 120 training size
+tic <- proc.time()[3]
+ras_result2 <- calculate_H_hat(X=Data2$datatrain[, -11] %>% as.matrix(), W=B, Beta=b, F=Gamma)
+DecompC2=eigen(ras_result2$H_hat)
 W2=DecompC2$vectors %>% as.matrix()
-qplot(c(1:10), AD2) + 
-  geom_line() + 
-  xlab("Dimension") + 
-  ylab("Variance Explained") +
-  ggtitle("Scree Plot") +
-  ylim(0, 1)+ xlim(1, 10)
 toc <- proc.time()[3]
 toc-tic
+DecompC22=svd(ras_result2$grad_hat)
+W22=DecompC22$v %>% as.matrix()
 
 
+# A case of using 280 training size
 tic <- proc.time()[3]
-X44 = scale(Data4$datatrain[, -11] %>% as.matrix())
-N4=nrow(X44)
-gradF4=matrix(rep(NA, N4*d), ncol = d)
-for (m in 1:d) {
-gradF4[, m] = b * B[m, ]  + 2 * Gamma * B[m, ]^2 * X44[, m]
-}
-C_sum4=list()
-for (k in 1:N4) {
-C_sum4[[k]]= gradF4[k,] %>% as.matrix() %*% t(gradF4[k, ])
-}
-list_sum4 <- Reduce("+",C_sum4)                  # Calculate sum of matrices
-estimated_C4 = (1/N4) * list_sum4 
-DecompC4=eigen(estimated_C4)
-Pvariation4 = ProVariation(eignevalues = DecompC4$values)  
-AD4=DecompC4$values/sum(DecompC4$values)
-qplot(c(1:10), AD4) + 
-  geom_line() + 
-  xlab("Dimension") + 
-  ylab("Variance Explained") +
-  ggtitle("Scree Plot") +
-  ylim(0, 1) + xlim(1, 10)
+ras_result4 <- calculate_H_hat(X=Data4$datatrain[, -11] %>% as.matrix(), W=B, Beta=b, F=Gamma)
+DecompC4=eigen(ras_result4$H_hat)
+W4=DecompC4$vectors %>% as.matrix()
 toc <- proc.time()[3]
-toc - tic
+toc-tic
+DecompC44=svd(ras_result4$grad_hat)
+W44=DecompC44$v %>% as.matrix()
 
 
-
+# A case of using 480 training size
 tic <- proc.time()[3]
-X66 = scale(Data6$datatrain[, -11] %>% as.matrix())
-N6=nrow(X66)
-gradF6=matrix(rep(NA, N6*d), ncol = d)
-for (m in 1:d) {
-gradF6[, m] = b * B[m, ] + 2 * Gamma * B[m, ]^2 * X66[, m]
-}
-C_sum6=list()
-for (k in 1:N6) {
-C_sum6[[k]]= gradF6[k,] %>% as.matrix() %*% t(gradF6[k, ])
-}
-
-list_sum6 <- Reduce("+",C_sum6)                  # Calculate sum of matrices
-estimated_C6 = (1/N6) * list_sum6 
-DecompC6=eigen(estimated_C6)
-Pvariation6 = ProVariation(eignevalues = DecompC6$values)
+ras_result6 <- calculate_H_hat(X=Data6$datatrain[, -11] %>% as.matrix(), W=B, Beta=b, F=Gamma)
+DecompC6=eigen(ras_result6$H_hat)
 W6=DecompC6$vectors %>% as.matrix()
-AD6=DecompC4$values/sum(DecompC6$values)
-qplot(c(1:10), AD6) + 
-  geom_line() + geom_point(aes(x = c(1:10), y =  AD6))+
-  xlab("Dimension") + 
-  ylab("Variance Explained") +
-  ggtitle("Scree Plot") +
-  ylim(0, 1) + xlim(1, 10)
 toc <- proc.time()[3]
 toc-tic
+DecompC66=svd(ras_result6$grad_hat)
+W66=DecompC66$v %>% as.matrix()
+
+
+```
+
+
+
+```{r}
+
+# Codes for the plots
+# Load the ggplot2 library
+library(ggplot2)
+
+graph_eigenA <- function(eigenvalues, size) {
+  library(ggplot2)
+  library(ggrepel)
+  
+  # Calculate cumulative sum and convert to percentage of total
+  eigenvalues_df <- data.frame(
+    Eigenvalue = eigenvalues,
+    Component = 1:length(eigenvalues)
+  )
+  eigenvalues_df$CumulativePercentage <- cumsum(eigenvalues_df$Eigenvalue) / sum(eigenvalues_df$Eigenvalue) * 100
+  
+  # Create a scree plot with optimized y-axis and label placements
+  scree_plot <- ggplot(eigenvalues_df, aes(x = Component, y = CumulativePercentage)) +
+    geom_line() +  # Add a line graph
+    geom_point() +  # Add points to the graph
+    geom_text_repel(  # Use ggrepel for better label management
+      aes(label = sprintf("%.2f%%", CumulativePercentage)),
+      nudge_y = 2,  # Nudge labels upward for clarity
+      size = 5,  # Increase text size
+      box.padding = unit(0.35, "lines"),  # Add padding around text
+      point.padding = unit(0.3, "lines")  # Add padding around points
+    ) +
+    labs(x = "Principal Component",
+         y = "Cumulative Percentage (%)") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+      axis.text = element_text(size = size),  # Increase axis text size
+      axis.title = element_text(size = size)  # Increase axis title size
+    ) +
+    scale_x_continuous(breaks = 1:10, labels = 1:10) +  # Define x-axis breaks and labels from 1 to 10
+    scale_y_continuous(limits = c(10, 105), expand = c(0, 0))  # Adjust y-axis to show 0% to slightly above 100%
+  
+  # Display the plot
+  return(print(scree_plot))
+}
+
+
+graph_eigenA((resultsPCA2$sdev)^2, size=22)
+graph_eigenA((resultsPCA4$sdev)^2, size=22)
+graph_eigenA((resultsPCA6$sdev)^2, size=22)
+
+
+
+# Create a data frame with your data
+c2=cv2$val[estimate= "adjCV", , ] %>% as.vector()
+data2 <- data.frame(
+  Component = 1:10,  # Principal Components from 1 to 10
+  CV_error = c2[-1]# Your data points
+)
+
+# Create the plot
+plot2 <- ggplot(data2, aes(x = Component, y = CV_error)) +
+  geom_line() +  # Connect points with a line
+  geom_point() +  # Show points on the plot
+  labs(x = "Component", y = "LOOCV Error") +
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    axis.text = element_text(size = 22),  # Increase the axis numbering size
+    axis.title = element_text(size = 22)  # Adjust this size if needed
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10)
+# Print the plot
+print(plot2)
+
+
+
+
+# Create a data frame with your data
+c4=cv4$val[estimate= "adjCV", , ] %>% as.vector()
+data4 <- data.frame(
+  Component = 1:10,  # Principal Components from 1 to 10
+  CV_error = c4[-1]# Your data points
+)
+
+# Create the plot
+plot4 <- ggplot(data4, aes(x = Component, y = CV_error)) +
+  geom_line() +  # Connect points with a line
+  geom_point() +  # Show points on the plot
+  labs(x = "Component", y = "LOOCV Error") +
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    axis.text = element_text(size = 22),  # Increase the axis numbering size
+    axis.title = element_text(size = 22)  # Adjust this size if needed
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10)
+# Print the plot
+print(plot4)
+
+
+
+
+# Create a data frame with your data
+c6=cv6$val[estimate= "adjCV", , ] %>% as.vector()
+data6 <- data.frame(
+  Component = 1:10,  # Principal Components from 1 to 10
+  CV_error = c6[-1]# Your data points
+)
+
+# Create the plot
+plot6 <- ggplot(data6, aes(x = Component, y = CV_error)) +
+  geom_line() +  # Connect points with a line
+  geom_point() +  # Show points on the plot
+  labs(x = "Component", y = "LOOCV Error") +
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    axis.text = element_text(size = 22),  # Increase the axis numbering size
+    axis.title = element_text(size = 22)  # Adjust this size if needed
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10)
+# Print the plot
+print(plot6)
+
+# 
+
+
+library(ggrepel)  # For better label placement
+
+graph_eigenA1=function(eigenvalues){
+  # Calculate cumulative sum and convert to percentage of total
+  eigenvalues_df <- data.frame(
+    Eigenvalue = eigenvalues,
+    Component = 1:length(eigenvalues)
+  )
+  eigenvalues_df$CumulativePercentage <- cumsum(eigenvalues_df$Eigenvalue) / sum(eigenvalues_df$Eigenvalue) * 100
+  
+  # Create a scree plot with optimized y-axis and label placements
+  scree_plot <- ggplot(eigenvalues_df, aes(x = Component, y = CumulativePercentage)) +
+    geom_line() +  # Add a line graph
+    geom_point() +  # Add points to the graph
+    geom_text_repel(  # Use ggrepel for better label management
+      aes(label = sprintf("%.2f%%", CumulativePercentage)),
+      nudge_y = 2,  # Nudge labels upward for clarity
+      size = 3,  # Adjust text size if necessary
+      box.padding = unit(0.35, "lines"),  # Add padding around text
+      point.padding = unit(0.3, "lines")  # Add padding around points
+    ) +
+    labs(x = "Active Component",
+         y = "Cumulative Percentage (%)") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+      axis.text = element_text(size = size),  # Increase axis text size
+      axis.title = element_text(size = size)  # Increase axis title size
+    ) +  # Center the plot title
+    scale_x_continuous(breaks = 1:10, labels = 1:10) +  # Define x-axis breaks and labels from 1 to 10
+    scale_y_continuous(limits = c(60, 105), expand = c(0, 0))  # Adjust y-axis to show 0% to slightly above 100%
+  
+  # Display the plot
+  return(print(scree_plot))
+}
+graph_eigenA1(DecompC2$values)
+graph_eigenA1(DecompC4$values)
+graph_eigenA1(DecompC6$values)
+
+#DecompC2$values
+
+graph_eigenA11 <- function(eigenvalues) {
+  library(ggplot2)
+  library(ggrepel)
+  
+  # Calculate cumulative sum and convert to percentage of total
+  eigenvalues_df <- data.frame(
+    Eigenvalue = eigenvalues,
+    Component = 1:length(eigenvalues)
+  )
+  eigenvalues_df$CumulativePercentage <- cumsum(eigenvalues_df$Eigenvalue) / sum(eigenvalues_df$Eigenvalue) * 100
+  
+  # Create a scree plot with optimized y-axis and label placements
+  scree_plot <- ggplot(eigenvalues_df, aes(x = Component, y = CumulativePercentage)) +
+    geom_line() +  # Add a line graph
+    geom_point() +  # Add points to the graph
+    geom_text_repel(  # Use ggrepel for better label management
+      aes(label = sprintf("%.2f%%", CumulativePercentage)),
+      nudge_y = 2,  # Nudge labels upward for clarity
+      size = 5,  # Increase text size
+      box.padding = unit(0.35, "lines"),  # Add padding around text
+      point.padding = unit(0.3, "lines")  # Add padding around points
+    ) +
+    labs(x = "Active Component",
+         y = "Cumulative Percentage (%)") +
+    theme_minimal() +
+    theme(
+      plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+      axis.text = element_text(size = 22),  # Increase axis text size
+      axis.title = element_text(size = 22)  # Increase axis title size
+    ) +
+    scale_x_continuous(breaks = 1:10, labels = 1:10) +  # Define x-axis breaks and labels from 1 to 10
+    scale_y_continuous(limits = c(95, 105), expand = c(0, 0))  # Adjust y-axis to show 0% to slightly above 100%
+  
+  # Display the plot
+  return(print(scree_plot))
+}
+
+
+graph_eigenA11(DecompC2$values)
+graph_eigenA11(DecompC4$values)
+graph_eigenA11(DecompC6$values)
+
+
+
+library(ggplot2)
+library(reshape2)
+library(patchwork)  # Load patchwork for arranging plots
+
+# # Data Preparation
+# gKDR1 <- c(0.145368, 0.351702, 0.550187, 0.602102, 0.751283, 0.811140, 0.833401, 0.834410, 0.850487, 0.997203)
+# gKDRi1 <- c(0.012736, 0.014167, 0.129851, 0.163107, 0.203299, 0.378923, 0.451970, 0.556865, 0.58880, 0.816915)
+# gKDRV1 <- c(0.0168779, 0.023767, 0.030907, 0.176721, 0.288112, 0.530105, 0.621648, 0.772810, 0.919913, 0.964612)
+# gKDRV1_r<-c(0.01537, 0.167506, 0.382841, 0.583909,0.599502, 0.776984, 0.837549, 0.942338, 0.955621, 0.999128)
+# 
+# gKDR2 <- c(0.128234, 0.266175, 0.447402, 0.688966, 0.697123, 0.766374, 0.826656, 0.903368, 0.976219, 0.980084)
+# gKDRi2 <- c(0.005279, 0.025839, 0.183788, 0.197487, 0.214113, 0.253439, 0.287174, 0.420978, 0.653121, 0.879273642)
+# gKDRV2 <- c(0.0076243, 0.0536932, 0.0170953, 0.197535, 0.227500, 0.279711, 0.287552, 0.460171, 0.516762, 0.949253)
+# gKDRV2_r<- c(0.0103, 0.154216, 0.302267, 0.475749, 0.514529,0.752811, 0.803357, 0.855109, 0.899559, 0.998177)
+# 
+# gKDR3 <- c(0.030334, 0.057870, 0.117302, 0.144144, 0.178462, 0.478287, 0.547125, 0.801500, 0.844774, 0.997859)
+# gKDRi3 <- c(0.001367, 0.013756, 0.014295, 0.160517, 0.216903, 0.234015, 0.260288, 0.3682068, 0.5679432, 0.7882854)
+# gKDRV3 <- c(0.004979, 0.065420, 0.156806, 0.360120, 0.379671, 0.557195, 0.625408, 0.632381, 0.803013, 0.956592)
+# gKDRV3_r <- c(0.00114, 0.085557, 0.140078, 0.4074847, 0.595176, 0.61061, 0.76213, 0.839621, 0.908737, 0.999972)
+
+
+
+# Combining data into a data frame
+data <- data.frame(Index = 1:10,
+                   gKDR1 = gKDR_c1,
+                   gKDRi1 = gKDRi_c1,
+                   gKDRV1 = gKDRv_c1,
+                   gKDR2 = gKDR_c2,
+                   gKDRi2 = gKDRi_c2,
+                   gKDRV2 = gKDRv_c2,
+                   gKDR3 = gKDR_c3,
+                   gKDRi3 = gKDRi_c3,
+                   gKDRV3 = gKDRv_c3)
+
+# Melting data for ggplot
+data_melted <- melt(data, id.vars = "Index")
+
+
+
+labels <- c(gKDR1 = "gKDR", gKDRi1 = "gKDR-i", gKDRV1 = "gKDR-v",
+            gKDR2 = "gKDR", gKDRi2 = "gKDR-i", gKDRV2 = "gKDR-v",
+            gKDR3 = "gKDR", gKDRi3 = "gKDR-i", gKDRV3 = "gKDR-v")
+
+
+P1 <- ggplot(data = subset(data_melted, variable %in% c("gKDR1", "gKDRi1", "gKDRV1")), aes(x = Index, y = value, linetype = variable)) +
+  geom_line() +
+  geom_point() +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted"), labels = labels) +
+  ylab("RMSPE") +
+  xlab("D") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+    axis.text = element_text(size = 11),  # Increase axis text size
+    axis.title = element_text(size = 11)  # Increase axis title size
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10) +
+  guides(linetype = guide_legend(title = "Method (n=120)"))+  # Define x-axis breaks and labels from 1 to 10
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) 
+
+P2 <- ggplot(data = subset(data_melted, variable %in% c("gKDR2", "gKDRi2", "gKDRV2")), aes(x = Index, y = value, linetype = variable)) +
+  geom_line() +
+  geom_point() +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted"), labels = labels) +
+  ylab("RMSPE") +
+  xlab("D") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+    axis.text = element_text(size = 11),  # Increase axis text size
+    axis.title = element_text(size = 11)  # Increase axis title size
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10) +
+  guides(linetype = guide_legend(title = "Method (n=280)"))+  # Define x-axis breaks and labels from 1 to 10
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) 
+
+P3 <- ggplot(data = subset(data_melted, variable %in% c("gKDR3", "gKDRi3", "gKDRV3")), aes(x = Index, y = value, linetype = variable)) +
+  geom_line() +
+  geom_point() +
+  scale_linetype_manual(values = c("solid", "dashed", "dotted"), labels = labels) +
+  ylab("RMSPE") +
+  xlab("D") +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, size = 20),  # Increase title size
+    axis.text = element_text(size = 11),  # Increase axis text size
+    axis.title = element_text(size = 11)  # Increase axis title size
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10) + 
+  guides(linetype = guide_legend(title = "Method (n=480)"))+  # Define x-axis breaks and labels from 1 to 10
+  scale_y_continuous(limits = c(0, 1), expand = c(0, 0)) 
+
+# Combining the plots
+combined_plot <- P1 + P2 + P3 + plot_layout(ncol = 1)  # Arrange vertically in one column
+print(combined_plot)
+
+
+
+
+
+graph_gKDR=function(error_value){
+data <- data.frame(
+  Component = 1:10,  # Principal Components from 1 to 10
+  RMSPE = error_value# Your data points
+)
+
+# Create the plot
+plot <- ggplot(data, aes(x = Component, y = RMSPE)) +
+  geom_line() +  # Connect points with a line
+  geom_point() +  # Show points on the plot
+  labs(x = "D", y = "RMSPE") +
+  theme_minimal() +  # Use a minimal theme
+  theme(
+    axis.text = element_text(size = 22),  # Increase the axis numbering size
+    axis.title = element_text(size = 22)  # Adjust this size if needed
+  ) +
+  scale_x_continuous(breaks = 1:10, labels = 1:10)
+# Print the plot
+return(print(plot))
+}
+
+graph_gKDR(gKDR1)
+graph_gKDR(gKDR2)
+graph_gKDR(gKDR3)
+
+graph_gKDR(gKDRi1)
+graph_gKDR(gKDRi2)
+graph_gKDR(gKDRi3)
+
+graph_gKDR(gKDRV1)
+graph_gKDR(gKDRV2)
+graph_gKDR(gKDRV3)
+
+graph_gKDR(gKDRV1_r)
+graph_gKDR(gKDRV2_r)
+graph_gKDR(gKDRV3_r)
+
+```
+
+
+
+
+
+
+```{r}
+#gKDR Results
+
+g2data =read.csv("project2Ng.csv") %>% as.matrix()
+g4data =read.csv("project4Ng.csv") %>% as.matrix()
+g6data =read.csv("project6Ng.csv") %>% as.matrix()
+
+gi2data =read.csv("project2Ngi.csv")%>% as.matrix()
+gi4data =read.csv("project4Ngi.csv")%>% as.matrix()
+gi6data =read.csv("project6Ngi.csv")%>% as.matrix()
+
+gv2data =read.csv("project2Ngv.csv")%>% as.matrix()
+gv4data =read.csv("project4Ngv.csv")%>% as.matrix()
+gv6data =read.csv("project6Ngv.csv")%>% as.matrix()
+
+gv1_r = read.csv("W1_1.csv")%>% as.matrix()
+gv2_r = read.csv("W2_1.csv")%>% as.matrix()
+gv3_r = read.csv("W3_1.csv")%>% as.matrix()
+```
+
+
+
+```{r}
+
+# We evaluate the discrepancy the estimated and true projection 
+
+Discrepancy_PCA1 = c(Kernel=kernel_method(W=resultsPCA2$rotation[, 1:8]  %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA2$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA2$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA2$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA2$rotation[, 1:8] %>% as.matrix(), W_0=B))
+
+Discrepancy_PCA2 = c(Kernel=kernel_method(W=resultsPCA4$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA4$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA4$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA4$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA4$rotation[, 1:8] %>% as.matrix(), W_0=B))
+
+
+Discrepancy_PCA3 = c(Kernel=kernel_method(W=resultsPCA6$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA6$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA6$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA6$rotation[, 1:8] %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA6$rotation[, 1:8] %>% as.matrix(), W_0=B))
+
+
+Discrepancy_PCA4 = c(Kernel=kernel_method(W=resultsPCA2$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA2$rotation[, 1:2] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA2$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA2$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA2$rotation[, 1:2]  %>% as.matrix(), W_0=B))
+
+Discrepancy_PCA5 = c(Kernel=kernel_method(W=resultsPCA4$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA4$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA4$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA4$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA4$rotation[, 1:2]  %>% as.matrix(), W_0=B))
+
+
+Discrepancy_PCA6 = c(Kernel=kernel_method(W=resultsPCA6$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=resultsPCA6$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=resultsPCA6$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=resultsPCA6$rotation[, 1:2]  %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=resultsPCA6$rotation[, 1:2]  %>% as.matrix(), W_0=B))
+
+
+
+#PLS method
+Discrepancy_PLS1 = c(Kernel=kernel_method(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B), 
+                     Wang=Wang_method(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B), 
+                     Ferr=Ferr_method(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B),
+                     Pal=Relative_error(W=simPls2$projection[, 1] %>% as.matrix(), W_0=B))
+
+
+Discrepancy_PLS2 = c(Kernel=kernel_method(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B),
+                     Li=Li_and_Chiaromonte_method(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B), 
+                      Wang=Wang_method(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B), 
+                      Ferr=Ferr_method(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B),
+                     Pal=Relative_error(W=simPls4$projection[, 1] %>% as.matrix(), W_0=B))
+
+
+Discrepancy_PLS3 = c(Kernel=kernel_method(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B), 
+                     gKDR_=gKDR_method(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B), 
+                     Li=Li_and_Chiaromonte_method(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B), 
+                      Wang=Wang_method(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B), 
+                      Ferr=Ferr_method(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B),
+                     Pal=Relative_error(W=simPls6$projection[, 1] %>% as.matrix(), W_0=B))
+
+
+
+
+#AS
+Discrepancy_AS1 = c(Kernel=kernel_method(W=W2[, 1] %>% as.matrix(), W_0=B),
+                    gKDR_=gKDR_method(W=W2[, 1] %>% as.matrix(), W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=W2[, 1] %>% as.matrix(), W_0=B), 
+                    Wang=Wang_method(W=W2[, 1] %>% as.matrix(), W_0=B), 
+                    Ferr=Ferr_method(W=W2[, 1] %>% as.matrix(), W_0=B),
+                    Pal=Relative_error(W=W2[, 1] %>% as.matrix(), W_0=B))
+
+Discrepancy_AS2 = c(Kernel=kernel_method(W=W4[, 1] %>% as.matrix(), W_0=B),
+                    gKDR_=gKDR_method(W=W4[, 1] %>% as.matrix(), W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=W4[, 1] %>% as.matrix(), W_0=B), 
+                    Wang=Wang_method(W=W4[, 1] %>% as.matrix(), W_0=B), 
+                    Ferr=Ferr_method(W=W4[, 1] %>% as.matrix(), W_0=B),
+                    Pal=Relative_error(W=W4[, 1] %>% as.matrix(), W_0=B))
+
+Discrepancy_AS3 = c(Kernel=kernel_method(W=W6[, 1] %>% as.matrix(), W_0=B),
+                    gKDR_=gKDR_method(W=W6[, 1] %>% as.matrix(), W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=W6[, 1] %>% as.matrix(), W_0=B), 
+                    Wang=Wang_method(W=W6[, 1] %>% as.matrix(), W_0=B), 
+                    Ferr=Ferr_method(W=W6[, 1] %>% as.matrix(), W_0=B),
+                    Pal=Relative_error(W=W6[, 1] %>% as.matrix(), W_0=B))
+
+
+#gKDR
+
+Discrepancy_g2data = c(Kernel=kernel_method(W=g2data, W_0=B),
+                    gKDR_=gKDR_method(W=g2data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=g2data, W_0=B), 
+                    Wang=Wang_method(W=g2data, W_0=B), 
+                    Ferr=Ferr_method(W=g2data, W_0=B))
+
+Discrepancy_g4data  = c(Kernel=kernel_method(W=g4data , W_0=B),
+                    gKDR_=gKDR_method(W=g4data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=g4data, W_0=B), 
+                    Wang=Wang_method(W=g4data, W_0=B), 
+                    Ferr=Ferr_method(W=g4data, W_0=B))
+
+Discrepancy_g6data  = c(Kernel=kernel_method(W=g6data, W_0=B),
+                    gKDR_=gKDR_method(W=g6data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=g6data, W_0=B), 
+                    Wang=Wang_method(W=g6data, W_0=B), 
+                    Ferr=Ferr_method(W=g6data, W_0=B))
+
+#gKDR -i
+Discrepancy_gi2data = c(Kernel=kernel_method(W=gi2data, W_0=B),
+                    gKDR_=gKDR_method(W=gi2data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gi2data, W_0=B), 
+                    Wang=Wang_method(W=gi2data, W_0=B), 
+                    Ferr=Ferr_method(W=gi2data, W_0=B))
+
+Discrepancy_gi4data  = c(Kernel=kernel_method(W=gi4data , W_0=B),
+                    gKDR_=gKDR_method(W=g4data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gi4data, W_0=B), 
+                    Wang=Wang_method(W=gi4data, W_0=B), 
+                    Ferr=Ferr_method(W=gi4data, W_0=B))
+
+Discrepancy_gi6data  = c(Kernel=kernel_method(W=gi6data, W_0=B),
+                    gKDR_=gKDR_method(W=gi6data, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gi6data, W_0=B), 
+                    Wang=Wang_method(W=gi6data, W_0=B), 
+                    Ferr=Ferr_method(W=gi6data, W_0=B))
+
+
+#gKDR -v
+Discrepancy_gv6data = c(Kernel=kernel_method(W=gv1_r, W_0=B),
+                    gKDR_=gKDR_method(W=gv1_r, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gv1_r, W_0=B), 
+                    Wang=Wang_method(W=gv1_r, W_0=B), 
+                    Ferr=Ferr_method(W=gv1_r, W_0=B),
+                    Pal=Relative_error(W=gv1_r, W_0=B))
+
+Discrepancy_gv6data= c(Kernel=kernel_method(W=gv2_r, W_0=B),
+                    gKDR_=gKDR_method(W=gv2_r, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gv2_r, W_0=B), 
+                    Wang=Wang_method(W=gv2_r, W_0=B), 
+                    Ferr=Ferr_method(W=gv2_r, W_0=B),
+                    Pal=Relative_error(W=gv2_r, W_0=B))
+
+Discrepancy_gv6data = c(Kernel=kernel_method(W=gv3_r, W_0=B),
+                    gKDR_=gKDR_method(W=gv3_r, W_0=B), 
+                    Li=Li_and_Chiaromonte_method(W=gv3_r, W_0=B), 
+                    Wang=Wang_method(W=gv3_r, W_0=B), 
+                    Ferr=Ferr_method(W=gv3_r, W_0=B),
+                    Pal=Relative_error(W=gv3_r, W_0=B))
+
+
+
+print("PCA")
+Discrepancy_PCA1
+Discrepancy_PCA2
+Discrepancy_PCA3
+
+Discrepancy_PCA4
+Discrepancy_PCA5
+Discrepancy_PCA6
+
+print("PLS")
+Discrepancy_PLS1
+Discrepancy_PLS2
+Discrepancy_PLS3
+
+
+
+print("AS")
+Discrepancy_AS1
+Discrepancy_AS2
+Discrepancy_AS3
+
+
+
+print("gKDR with D=1")
+Discrepancy_g2data
+Discrepancy_g4data
+Discrepancy_g6data
+
+
+print("gKDRi with D=1")
+Discrepancy_gi2data
+Discrepancy_gi4data
+Discrepancy_gi6data
+
+
+print("gKDRv with D=1")
+Discrepancy_gv2data
+Discrepancy_gv4data
+Discrepancy_gv6data
+
+
+
 
 ```
 
@@ -618,6 +1386,8 @@ toc-tic
 
 
 ```{r}
+
+# GP Performance Metrics
 set.seed(1000)
 
 counter=0
@@ -631,7 +1401,7 @@ toc - tic
 
 tic <- proc.time()[3]
 pcaSr4= DimRed(X=resultsPCA4$x[,1:7], y=Data4$datatrain[, 11] %>% as.matrix(), 
-               XX=Data4$datatest[,-11] %>% as.matrix() %*% resultsPCA4$rotation[, 1:7], 
+               XX=Data4$datatest[,-11] %>% as.matrix() %*% resultsPCA4$rotation[, 1:8], 
                yytrue=Data4$yytrue%>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
@@ -639,7 +1409,7 @@ toc - tic
 
 tic <- proc.time()[3]
 pcaSr6= DimRed(X=resultsPCA6$x[,1:6], y=Data6$datatrain[, 11] %>% as.matrix(), 
-               XX=Data6$datatest[,-11] %>% as.matrix() %*% resultsPCA6$rotation[, 1:6], 
+               XX=Data6$datatest[,-11] %>% as.matrix() %*% resultsPCA6$rotation[, 1:8], 
                yytrue=Data6$yytrue%>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
@@ -696,43 +1466,33 @@ toc <- proc.time()[3]
 toc - tic
 
 
+
+
+
 tic <- proc.time()[3]
-actr2=DimRed(X=X22 %>% as.matrix() %*% W2[, 1:2], 
+actr2=DimRed(X=X22 %>% as.matrix() %*% W2[, 1], 
              y=Data2$datatrain[, 11] %>% as.matrix(), 
-             XX=Data2$datatest[,-11] %>% as.matrix() %*% W2[, 1:2], 
+             XX=Data2$datatest[,-11] %>% as.matrix() %*% W2[, 1], 
              yytrue=Data2$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
 tic <- proc.time()[3]
-actr4=DimRed(X=X44 %>% as.matrix() %*% W2[, 1:2], 
+actr4=DimRed(X=X44 %>% as.matrix() %*% W2[, 1], 
              y=Data4$datatrain[, 11] %>% as.matrix(), 
-             XX=Data4$datatest[,-11] %>% as.matrix() %*% W2[, 1:2], 
+             XX=Data4$datatest[,-11] %>% as.matrix() %*% W2[, 1], 
              yytrue=Data4$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
 tic <- proc.time()[3]
-actr6=DimRed(X=X66 %>% as.matrix() %*% W2[, 1:2], 
+actr6=DimRed(X=X66 %>% as.matrix() %*% W2[, 1], 
              y=Data6$datatrain[, 11] %>% as.matrix(), 
-             XX=Data6$datatest[,-11] %>% as.matrix() %*% W2[, 1:2], 
+             XX=Data6$datatest[,-11] %>% as.matrix() %*% W2[, 1], 
              yytrue=Data6$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
-
-
-g2data =read.csv("project2Ng.csv") %>% as.matrix()
-g4data =read.csv("project4Ng.csv") %>% as.matrix()
-g6data =read.csv("project6Ng.csv") %>% as.matrix()
-
-gi2data =read.csv("project2Ngi.csv")%>% as.matrix()
-gi4data =read.csv("project4Ngi.csv")%>% as.matrix()
-gi6data =read.csv("project6Ngi.csv")%>% as.matrix()
-
-gv2data =read.csv("project2Ngv.csv")%>% as.matrix()
-gv4data =read.csv("project4Ngv.csv")%>% as.matrix()
-gv6data =read.csv("project6Ngv.csv")%>% as.matrix()
 
 
 
@@ -852,713 +1612,43 @@ gvr6
 
 
 
-```
-
-
-```{r}
-library(ggplot2)
-library(reshape2)
-library(patchwork)  # Load patchwork for arranging plots
-
-# Data Preparation
-gKDR1 <- c(0.145368, 0.351702, 0.550187, 0.602102, 0.751283, 0.811140, 0.833401, 0.834410, 0.850487, 0.997203)
-gKDRi1 <- c(0.012736, 0.014167, 0.129851, 0.163107, 0.203299, 0.378923, 0.451970, 0.556865, 0.58880, 0.816915)
-gKDRV1 <- c(0.0168779, 0.023767, 0.030907, 0.176721, 0.288112, 0.530105, 0.621648, 0.772810, 0.919913, 0.964612)
-
-
-gKDR2 <- c(0.128234, 0.266175, 0.447402, 0.688966, 0.697123, 0.766374, 0.826656, 0.903368, 0.976219, 0.980084)
-gKDRi2 <- c(0.005279, 0.025839, 0.183788, 0.197487, 0.214113, 0.253439, 0.287174, 0.420978, 0.653121, 0.879273642)
-gKDRV2 <- c(0.0076243, 0.0536932, 0.0170953, 0.197535, 0.227500, 0.279711, 0.287552, 0.460171, 0.516762, 0.949253)
-
-gKDR3 <- c(0.030334, 0.057870, 0.117302, 0.144144, 0.178462, 0.478287, 0.547125, 0.801500, 0.844774, 0.997859)
-gKDRi3 <- c(0.001367, 0.013756, 0.014295, 0.160517, 0.216903, 0.234015, 0.260288, 0.3682068, 0.5679432, 0.7882854)
-gKDRV3 <- c(0.004979, 0.065420, 0.156806, 0.360120, 0.379671, 0.557195, 0.625408, 0.632381, 0.803013, 0.956592)
-
-# Combining data into a data frame
-data <- data.frame(Index = 1:10,
-                   gKDR1 = gKDR1,
-                   gKDRi1 = gKDRi1,
-                   gKDRV1 = gKDRV1,
-                   gKDR2 = gKDR2,
-                   gKDRi2 = gKDRi2,
-                   gKDRV2 = gKDRV2,
-                   gKDR3 = gKDR3,
-                   gKDRi3 = gKDRi3,
-                   gKDRV3 = gKDRV3)
-
-# Melting data for ggplot
-data_melted <- melt(data, id.vars = "Index")
-
-
-# # Plotting each case
-# ggplot(data = subset(data_melted, variable %in% c("gKDR1", "gKDRi1", "gKDRV1")), aes(x = Index, y = value, color = variable)) +
-#   geom_line() +
-#   geom_point() +
-#   ylab("RMSEP") +
-#   xlab("Active Subspace") +
-#   theme_minimal() + 
-#   scale_x_continuous(breaks = 1:10, labels = 1:10)
-# 
-# ggplot(data = subset(data_melted, variable %in% c("gKDR2", "gKDRi2", "gKDRV2")), aes(x = Index, y = value, color = variable)) +
-#   geom_line() +
-#   geom_point() +
-#   ylab("Active Subspace") +
-#   xlab("Index") +
-#   theme_minimal() + 
-#   scale_x_continuous(breaks = 1:10, labels = 1:10)
-# 
-# ggplot(data = subset(data_melted, variable %in% c("gKDR3", "gKDRi3", "gKDRV3")), aes(x = Index, y = value, color = variable)) +
-#   geom_line() +
-#   geom_point() +
-#   ylab("RMSEP") +
-#   xlab("Active Subspace") +
-#   theme_minimal() + 
-#   scale_x_continuous(breaks = 1:10, labels = 1:10)
-
-
-labels <- c(gKDR1 = "gKDR (120)", gKDRi1 = "gKDRi (120)", gKDRV1 = "gKDRV (120)",
-            gKDR2 = "gKDR (280)", gKDRi2 = "gKDRi (280)", gKDRV2 = "gKDRV (280)",
-            gKDR3 = "gKDR (480)", gKDRi3 = "gKDRi (480)", gKDRV3 = "gKDRV (480)")
-
-
-
-
-
-# Data preparation, melting, and custom labels are assumed to be already defined
-
-# Plotting each case with custom legend labels
-P1 <- ggplot(data = subset(data_melted, variable %in% c("gKDR1", "gKDRi1", "gKDRV1")), aes(x = Index, y = value, color = variable)) +
-  geom_line() +
-  geom_point() +
-  scale_color_manual(values = c("blue", "red", "green"), labels = labels) +
-  ylab("RMSEP") +
-  xlab("Active Subspace") +
-  theme_minimal() +
-  scale_x_continuous(breaks = 1:10, labels = 1:10) +
-  guides(color = guide_legend(title = "Method"))
-
-P2 <- ggplot(data = subset(data_melted, variable %in% c("gKDR2", "gKDRi2", "gKDRV2")), aes(x = Index, y = value, color = variable)) +
-  geom_line() +
-  geom_point() +
-  scale_color_manual(values = c("blue", "red", "green"), labels = labels) +
-  ylab("RMSEP") +
-  xlab("Active Subspace") +
-  theme_minimal() +
-  scale_x_continuous(breaks = 1:10, labels = 1:10) +
-  guides(color = guide_legend(title = "Method"))
-
-P3 <- ggplot(data = subset(data_melted, variable %in% c("gKDR3", "gKDRi3", "gKDRV3")), aes(x = Index, y = value, color = variable)) +
-  geom_line() +
-  geom_point() +
-  scale_color_manual(values = c("blue", "red", "green"), labels = labels) +
-  ylab("RMSEP") +
-  xlab("Active Subspace") +
-  theme_minimal() +
-  scale_x_continuous(breaks = 1:10, labels = 1:10)
-  guides(color = guide_legend(title = "Method"))
-
-# Combining the plots
-combined_plot <- P1 + P2 + P3 + plot_layout(ncol = 1)  # Arrange vertically in one column
-print(combined_plot)
-
-
-```
-
-
-
-
-```{r}
-OptB2=matrix(c(0.00910139,0.05790653,0.18772296,-0.4774587, -0.45595596,0.67148236,0.12641533,0.00820117, -0.0724091, 0.23082832), ncol = 1)
-OptB4=matrix(c(0.0091014, 0.0579074, 0.187723, -0.47745846, -0.45595555, 0.67148274,0.12641587, 0.00820075, -0.0724086, 0.23082813),  ncol = 1)
-OptB6=matrix(c(0.00910116,0.05790733, 0.18772304,-0.47745855,-0.45595602, 0.67148238,0.12641549, 0.00820104, -0.07240888, 0.23082817),  ncol = 1)
-
-
-
 tic <- proc.time()[3]
-B2= DimRed(X=Data2$datatrain[, -11] %>% as.matrix() %*% OptB2, 
-            y=Data2$datatrain[, 11] %>% as.matrix(), 
-            XX=Data2$datatest[,-11] %>% as.matrix() %*% OptB2, 
-            yytrue=Data2$yytrue%>% as.matrix())
+gv1= DimRed(X=Data2$datatrain[, -11] %>% as.matrix() %*% gv1_r, 
+             y=Data2$datatrain[, 11] %>% as.matrix(), 
+             XX=Data2$datatest[,-11] %>% as.matrix() %*% gv1_r, 
+             yytrue=Data2$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
 
 tic <- proc.time()[3]
-B4= DimRed(X=Data4$datatrain[, -11] %>% as.matrix() %*% OptB4, 
-            y=Data4$datatrain[, 11] %>% as.matrix(), 
-            XX=Data4$datatest[,-11] %>% as.matrix() %*% OptB4, 
-            yytrue=Data4$yytrue%>% as.matrix())
+gv2= DimRed(X=Data4$datatrain[, -11] %>% as.matrix() %*% gv2_r, 
+             y=Data4$datatrain[, 11] %>% as.matrix(), 
+             XX=Data4$datatest[,-11] %>% as.matrix() %*% gv2_r, 
+             yytrue=Data4$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
 
 tic <- proc.time()[3]
-B6= DimRed(X=Data6$datatrain[, -11] %>% as.matrix() %*% OptB6, 
-            y=Data6$datatrain[, 11] %>% as.matrix(), 
-            XX=Data6$datatest[,-11] %>% as.matrix() %*% OptB6, 
-            yytrue=Data6$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-B2
-B4
-B6
-
-```
-
-```{r}
-#when W is random but other parameters are fixed
-#sample size 120
-OptBRW2=matrix(c(-0.40166965, -0.48437645, -0.22750495, 0.01886628, -0.00504093, 0.63396805, 0.2010223, -0.11537289, -0.19639611, -0.24019431), ncol=1)
-# time used
-# 1.6581804752349854
-# Calculate the trace of the projection
-# 1.8305614313649408
-# Calculate the Frobenius norm
-# 1.3529824209371462
-
-
-
-
-OptBRW4=matrix(c(-0.40168212,-0.48437558,-0.22750661,0.01886495, -0.0050346,0.63395927,0.20103273,-0.11536642,-0.19638499,-0.2402005), ncol = 1)
-# time used
-# 3.467266082763672
-# Calculate the trace of the projection
-# 1.8305564671553403
-# Calculate the Frobenius norm
-# 1.3529805863926283
-
-
-
-OptBRW6=matrix(c(-0.40167968,-0.48437841,-0.2275073,0.01886708,-0.00504881,0.63395772,0.20102909,-0.11536478,-0.19638972,-0.24020184), ncol=1)
-# time used
-# 10.360366582870483
-# Calculate the trace of the projection
-# 1.8305463620711127
-# Calculate the Frobenius norm
-# 1.3529768520086043
-
-
-tic <- proc.time()[3]
-BRW2= DimRed(X=DataRW2$datatrain[, -11] %>% as.matrix() %*% OptBRW2, 
-            y=DataRW2$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRW2$datatest[,-11] %>% as.matrix() %*% OptBRW2, 
-            yytrue=DataRW2$yytrue%>% as.matrix())
+gv3= DimRed(X=Data6$datatrain[, -11] %>% as.matrix() %*% gv3_r, 
+             y=Data6$datatrain[, 11] %>% as.matrix(), 
+             XX=Data6$datatest[,-11] %>% as.matrix() %*% gv3_r, 
+             yytrue=Data6$yytrue %>% as.matrix())
 toc <- proc.time()[3]
 toc - tic
 
-tic <- proc.time()[3]
-BRW4= DimRed(X=DataRW4$datatrain[, -11] %>% as.matrix() %*% OptBRW4, 
-            y=DataRW4$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRW4$datatest[,-11] %>% as.matrix() %*% OptBRW4, 
-            yytrue=DataRW4$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-tic <- proc.time()[3]
-BRW6= DimRed(X=DataRW6$datatrain[, -11] %>% as.matrix() %*% OptBRW6, 
-            y=DataRW6$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRW6$datatest[,-11] %>% as.matrix() %*% OptBRW6, 
-            yytrue=DataRW6$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-BRW2
-BRW4
-BRW6
-```
-
-
-
-```{r}
-#when W is random but other parameters fixed
-#Estimated W
-OptBFW2=matrix(c(0.00910148, 0.05790683, 0.18772243, -0.47745857, -0.45595613, 0.67148226, 0.12641593, 0.00820117, -0.07240885, 0.23082862), ncol=1)
-# time used
-# 35.13620471954346
-# Calculate the trace of the projection
-# 1.8279067986869495e-12
-# Calculate the Frobenius norm
-# 1.352001035016967e-06
-
-
-#Estimated W
-OptBFW4=matrix(c(0.00910064, 0.05790682, 0.1877233 , -0.47745866, -0.45595589, 0.67148231, 0.12641578, 0.00820069, -0.07240877, 0.23082824), ncol=1)
-# time used
-# 113.63902115821838
-# Calculate the trace of the projection
-# 1.1629243796502197e-12
-# Calculate the Frobenius norm
-# 1.0783897160350797e-06
-
-
-#Estimated W
-OptBFW6=matrix(c(0.0091012, 0.05790728, 0.1877228, -0.47745874, -0.45595599, 0.67148233, 0.12641554, 0.00820083,-0.07240899, 0.23082812), ncol=1)
-# time used
-# 417.6555526256561
-# Calculate the trace of the projection
-# 4.15076289725656e-13
-# Calculate the Frobenius norm
-# 6.442641459259207e-07
-
-
-tic <- proc.time()[3]
-BFW2= DimRed(X=DataFW2$datatrain[, -11] %>% as.matrix() %*% OptBFW2, 
-            y=DataFW2$datatrain[, 11] %>% as.matrix(), 
-            XX=DataFW2$datatest[,-11] %>% as.matrix() %*% OptBFW2, 
-            yytrue=DataFW2$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-tic <- proc.time()[3]
-BFW4= DimRed(X=DataFW4$datatrain[, -11] %>% as.matrix() %*% OptBFW4, 
-            y=DataFW4$datatrain[, 11] %>% as.matrix(), 
-            XX=DataFW4$datatest[,-11] %>% as.matrix() %*% OptBFW4, 
-            yytrue=DataFW4$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-tic <- proc.time()[3]
-BFW6= DimRed(X=DataFW6$datatrain[, -11] %>% as.matrix() %*% OptBFW6, 
-            y=DataFW6$datatrain[, 11] %>% as.matrix(), 
-            XX=DataFW6$datatest[,-11] %>% as.matrix() %*% OptBFW6, 
-            yytrue=DataFW6$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-BFW2
-BFW4
-BFW6
-```
-
-
-
-
-```{r}
-##when W and other parameters are random random 
-#Estimated W
-OptBRRW2=matrix(c(-0.19076081, -0.51601739, 0.01759906, 0.27361026, -0.33658722,-0.16496101,-0.20363634, 0.30800131, -0.00791808,-0.58759316), ncol = 1)
-# time used
-# 47.18848466873169
-# Calculate the trace of the projection
-# 6.465080274999202e-12
-# Calculate the Frobenius norm
-# 2.542652212749357e-06
-
-
-#Estimated W
-OptBRRW4=matrix(c(-0.19076042, -0.51601754, 0.01759892, 0.27361123, -0.33658724, -0.16496115, -0.20363631, 0.30800021, -0.00791917, -0.58759322), ncol = 1)
-# time used
-# 134.461101770401
-# Calculate the trace of the projection
-# 2.822587993595235e-13
-# Calculate the Frobenius norm
-# 5.312803397073183e-07
-
-OptBRRW6=matrix(c(-0.19076039, -0.5160178 , 0.01759904, 0.27361107, -0.33658728, -0.16496082, -0.2036365 , 0.30800032, -0.00791911, -0.58759302), ncol = 1)
-# time used
-# 621.1490862369537
-# Calculate the trace of the projection
-# 2.265553146012129e-13
-# Calculate the Frobenius norm
-# 4.759782711439808e-07
-
-
-
-tic <- proc.time()[3]
-BRRW2= DimRed(X=DataRRW2$datatrain[, -11] %>% as.matrix() %*% OptBRRW2, 
-            y=DataRRW2$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRRW2$datatest[,-11] %>% as.matrix() %*% OptBRRW2, 
-            yytrue=DataRRW2$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-
-tic <- proc.time()[3]
-BRRW4= DimRed(X=DataRRW4$datatrain[, -11] %>% as.matrix() %*% OptBRRW4, 
-            y=DataRRW4$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRRW4$datatest[,-11] %>% as.matrix() %*% OptBRRW4, 
-            yytrue=DataRRW4$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-tic <- proc.time()[3]
-BRRW6= DimRed(X=DataRRW6$datatrain[, -11] %>% as.matrix() %*% OptBRRW6, 
-            y=DataRRW6$datatrain[, 11] %>% as.matrix(), 
-            XX=DataRRW6$datatest[,-11] %>% as.matrix() %*% OptBRRW6, 
-            yytrue=DataRRW6$yytrue%>% as.matrix())
-toc <- proc.time()[3]
-toc - tic
-
-
-BRRW2
-BRRW4
-BRRW6
-```
-
-```{r}
-DimK = function(X, y, XX, yytrue, parame){
-
-
-# outg <- optim(c(rep(0.1, ncol(X)), 0.1*var(y)), nlsep,gradnlsep,
-# method="L-BFGS-B", lower=eps, upper=c(rep(Inf, ncol(X)), var(y)), X=X, Y=y)
-# 
-KernVar <- parame[ncol(X)+1]
-s=parame[1:ncol(X)]
-nugget <- parame[ncol(X)+2]
-n1=nrow(X)
-D=distance(X)
-K = parame[ncol(X)+1] * exp(-0.5*D/s^2) + 0.00000001 * diag(n1)
-
-#K <- covar.sep(X, d=parme[1:ncol(X)], g=parame[ncol(X)+1])
-
-Ki <- solve(K)
-
-#tau2hat <- drop(t(y) %*% Ki %*% y / nrow(X))
-
-
-n2=nrow(XX)
-
-DXX = distance(XX)
-KXX = parame[ncol(XX)+1] * exp(-0.5*DXX/s^2) + 0.00000001 * diag(n2)
-
-#KXX <- covar.sep(XX, d=outg$par[1:ncol(X)], g=outg$par[ncol(X)+1])
-
-DXX = distance(XX, X)
-KX <-  parame[ncol(XX)+1] * exp(-0.5*DXX/s^2)
-
-mup2 <- KX %*% Ki %*% y
-
-Sigmap2 <- KXX - KX %*% Ki %*% t(KX)
-
-Ymmu <- yytrue - mup2
-
-Sigmai <- solve(Sigmap2)
-
-
-#Different comparison metric 
-
-#Root-mean-square error
-RMSE=sqrt(mean(Ymmu^2))
-
-#Root mean square error adjusted by covariance
-mahdist <- t(Ymmu) %*% Sigmai %*% Ymmu
-RMSE_adj_cov=sqrt(mahdist)
-
-
-#Score which gives account of the magnitude of uncertainty and error accounted by the prediction
-score_value=-determinant(Sigmap2, logarithm=TRUE)$modulus - mahdist
-
-#Normalized predictive root-mean-square-error(PRMSE)
-Normalized_PRMSE=RMSE/(max(y)-min(y))
-
-#we compute NSME
-Nnsme = sum(Ymmu^2)
-Dnsme = sum((yytrue-mean(yytrue))^2)
-NSME = 1-(Nnsme/Dnsme)
-
-#Compute the nominal coverage
-lowerC = mup2 - 1.96 * sqrt(diag(Sigmap2) %>% as.matrix())
-upperC = mup2 +  1.96 * sqrt(diag(Sigmap2) %>% as.matrix())
-#if((lowerC <= yytrue) & (yytrue <= upperC)){
- # answerYes =1
-#}else{
-  #answer=0
-  #}
-inside_interval <- (lowerC <= yytrue) & (yytrue <= upperC)
-coverage_prob <- mean(inside_interval)
-
-
-# 95% ALCI 
-average_length <- mean(upperC - lowerC)
-
-#Continuous Ranked Probability Score
-# Assuming you have mean and standard deviation for each observation
-mean_values <- mup2 %>% as.vector()  # Replace with your mean values
-std_dev_values <-sqrt(diag(Sigmap2))  # Replace with your standard deviation values
-observed_values <- yytrue %>% as.vector()  # Replace with your observed values
-
-# Function to calculate predicted CDF for a normal distribution
-calculate_normal_cdf <- function(mean, std_dev, x) {
-pnorm(x, mean, std_dev)
-}
-
-# Calculate predicted CDF for each observation
-predicted_cdf <- sapply(1:length(mean_values), function(i) {
-calculate_normal_cdf(mean=mean_values[i], std_dev=std_dev_values[i], x=observed_values[i])
-})
-# Replace this with the range of values for which you want to compute the CDF
-compute_crps <- function(observed, mean, std_dev) {
-if (any(is.na(observed)) || any(is.na(mean)) || any(is.na(std_dev))) {
-    stop("Input vectors contain NA values.")
-  }
-  
-  if (any(is.infinite(observed)) || any(is.infinite(mean)) || any(is.infinite(std_dev))) {
-    stop("Input vectors contain infinite values.")
-  }
-
-  if (length(observed) != length(mean) || length(observed) != length(std_dev)) {
-    stop("Lengths of input vectors do not match.")
-  }
-  
-  
-num_obs <- length(observed)
-crps_values <- numeric(num_obs)
-for (i in 1:num_obs) {
-    obs_i <- observed[i]
-    predicted_cdf <- calculate_normal_cdf(mean[i], std_dev[i], obs_i)
-    crps_values[i] <- (predicted_cdf - (obs_i <= mean[i]))^2
-  }
-
-  return(mean(crps_values))
-}
-
-# Compute CRPS
-crps_score <- compute_crps(observed=observed_values, mean=mean_values, std_dev=std_dev_values)
-
-
-metric=c(RMSPE=RMSE,NSME=NSME,coverage_prob=coverage_prob, ALCI=average_length, CRPS=crps_score, RMSE_adj_cov=RMSE_adj_cov,  Normalized_PRMSE=Normalized_PRMSE, score_value=score_value)
-
-return(metric)
-
-}
-```
-
-
-```{r}
-# ActiveSubspaceKernel.rbf.variance     |     1673.7725438926445  |      +ve      |               
-#   ActiveSubspaceKernel.rbf.lengthscale  |     7.1044545545627935  |      +ve      |               
-#   Gaussian_noise.variance               |  6.350707975394659e-14  | 
-
-
-  
-parame=c(7.1044545545627935, 1673.7725438926445, 6.350707975394659e-14)
-
-# DimK(X=DataRRW6$datatrain[, -11] %>% as.matrix() %*% OptBRRW6,
-# y=DataRRW6$datatrain[, 11] %>% as.matrix(),
-# XX=DataRRW6$datatest[,-11] %>% as.matrix() %*% OptBRRW6,
-# yytrue=DataRRW6$yytrue%>% as.matrix(),parame=parame)
-
-
-KernVar <- parame[ncol(X)+1]
-s=parame[1:ncol(X)]
-nugget <- parame[ncol(X)+2]
-n1=nrow(X)
-D=distance(X)
-K = parame[ncol(X)+1] * exp(-0.5*D/s^2) + parame[ncol(XX)+1] * 0.000001 * diag(n1)
-
-#K <- covar.sep(X, d=parme[1:ncol(X)], g=parame[ncol(X)+1])
-
-Ki <- solve(K)
-
-#tau2hat <- drop(t(y) %*% Ki %*% y / nrow(X))
-
-
-n2=nrow(XX)
-
-DXX = distance(XX)
-KXX = parame[ncol(XX)+1] * exp(-0.5*DXX/s^2) + parame[ncol(XX)+1] * 0.000001 * diag(n2)
-
-#KXX <- covar.sep(XX, d=outg$par[1:ncol(X)], g=outg$par[ncol(X)+1])
-
-DXX = distance(XX, X)
-KX <-  parame[ncol(XX)+1] * exp(-0.5*DXX/s^2)
-
-mup2 <- KX %*% Ki %*% y
-
-Sigmap2 <- KXX - KX %*% Ki %*% t(KX)
-
-Ymmu <- yytrue - mup2
-
-
-Sigmai <- solve(Sigmap2)
-
-
-Ymmu <- yytrue - mup2
-
-Sigmai <- solve(Sigmap2)
-
-
-#Different comparison metric
-
-#Root-mean-square error
-RMSE=sqrt(mean(Ymmu^2))
-
-RMSE
-```
-
-
-
-
-```{r}
-
-# we use the projection method 
-BWo=matrix(c(-0.15585719, 0.25097898, 0.520428, -0.31235896, 0.62148088, -0.02533869, 0.01182028, -0.00598115, 0.20618621, -0.33872685), ncol = 1)
-BW=matrix(c(-0.33920335, -0.44459527, 0.12543759, 0.13001892, 0.62128225, -0.11566746, -0.35898566, 0.08824315, -0.03828788, 0.3422609), ncol = 1)
-
-P0= B %*% solve( t(B) %*% B) %*% t(B)
-P = OptB2 %*% solve( t(OptB2) %*% OptB2) %*% t(OptB2)
-sum(diag((P0-P) %*% (P0-P)))
-```
-
-
-
-
-```{r}
-P = B %*% solve( t(B) %*% B) %*% t(B)
-Ppca2= resultsPCA2$rotation[, 1:8]  %*% solve( t(resultsPCA2$rotation[, 1:8] ) %*% resultsPCA2$rotation[, 1:8] ) %*% t(resultsPCA2$rotation[, 1:8])
-Ppca4= resultsPCA4$rotation[, 1:7]  %*% solve( t(resultsPCA4$rotation[, 1:7] ) %*% resultsPCA4$rotation[, 1:7] ) %*% t(resultsPCA4$rotation[, 1:7] )
-Ppca6= resultsPCA6$rotation[, 1:6]  %*% solve( t(resultsPCA6$rotation[, 1:6] ) %*% resultsPCA6$rotation[, 1:6] ) %*% t(resultsPCA6$rotation[, 1:6] )
-
-
-Ppls2= pl2 %*% solve( t(pl2) %*% pl2) %*% t(pl2)
-Ppls4= pl4 %*% solve( t(pl4) %*% pl4) %*% t(pl4)
-Ppls6= pl6 %*% solve( t(pl6) %*% pl6) %*% t(pl6)
-
-
-Pas2= W2[, 1:3] %*% solve( t(W2[, 1:3]) %*% W2[, 1:3]) %*% t(W2[, 1:3])
-Pas4= W4[, 1:2] %*% solve( t(W4[, 1:2]) %*% W4[, 1:2]) %*% t(W4[, 1:2])
-Pas6= W6[, 1:1] %*% solve( t(W6[, 1:1]) %*% W6[, 1:1]) %*% t(W6[, 1:1])
-
-
-Pg2= g2data %*% solve( t(g2data) %*% g2data) %*% t(g2data)
-Pg4= g4data %*% solve( t(g4data) %*% g4data) %*% t(g4data)
-Pg6= g6data %*% solve( t(g6data) %*% g6data) %*% t(g6data)
-
-
-Pgi2= gi2data %*% solve( t(gi2data) %*% gi2data) %*% t(gi2data)
-Pgi4= gi4data %*% solve( t(gi4data) %*% gi4data) %*% t(gi4data)
-Pgi6= gi6data %*% solve( t(gi6data) %*% gi6data) %*% t(gi6data)
-
-
-Pgv2= gv2data %*% solve( t(gv2data) %*% gv2data) %*% t(gv2data)
-Pgv4= gv4data %*% solve( t(gv4data) %*% gv4data) %*% t(gv4data)
-Pgv6= gv6data %*% solve( t(gv6data) %*% gv6data) %*% t(gv6data)
-
-sum(diag((P-Ppca2) %*% (P-Ppca2)))
-sum(diag((P-Ppca4) %*% (P-Ppca4)))
-sum(diag((P-Ppca6) %*% (P-Ppca6)))
-
-
-sum(diag((P-Ppls2) %*% (P-Ppls2)))
-sum(diag((P-Ppls4) %*% (P-Ppls4)))
-sum(diag((P-Ppls6) %*% (P-Ppls6)))
-
-
-sum(diag((P-Pas2) %*% (P-Pas2)))
-sum(diag((P-Pas4) %*% (P-Pas4)))
-sum(diag((P-Pas6) %*% (P-Pas6)))
-
-sum(diag((P-Pg2) %*% (P-Pg2)))
-sum(diag((P-Pg4) %*% (P-Pg4)))
-sum(diag((P-Pg6) %*% (P-Pg6)))
-
-
-sum(diag((P-Pgi2) %*% (P-Pgi2)))
-sum(diag((P-Pgi4) %*% (P-Pgi4)))
-sum(diag((P-Pgi6) %*% (P-Pgi6)))
-
-
-sum(diag((P-Pgv2) %*% (P-Pgv2)))
-sum(diag((P-Pgv4) %*% (P-Pgv4)))
-sum(diag((P-Pgv6) %*% (P-Pgv6)))
-```
-
-
-
-```{r}
-
-# Frobenius norm to evaluate the perform between the true projection and estimated projection
-
-Frobenius_norm =function(A){
- Fnorm=0
- for(i in 1:10){
-   for(j in 1:10){
-     Fnorm = Fnorm + (A[i, j])^2
-   }
-   
- }
-  
- return(sqrt(Fnorm))
-
-}
-
-
-
-pb2=resultsPCA2$rotation[, 1:8] 
-pb4=resultsPCA4$rotation[, 1:8]
-pb6=resultsPCA6$rotation[, 1:8]
-
-
-PCAB2 = pb2 %*% solve(t(pb2) %*% pb2) %*% t(pb2) - B %*% solve(t(B) %*% B) %*% t(B)
-PCAB4 = pb4 %*% solve(t(pb4) %*% pb4) %*% t(pb4) - B %*% solve(t(B) %*% B) %*% t(B)
-PCAB6 = pb6 %*% solve(t(pb6) %*% pb6) %*% t(pb6) - B %*% solve(t(B) %*% B) %*% t(B)
-
-pb22=resultsPCA2$rotation[, 1:4] 
-pb44=resultsPCA4$rotation[, 1:5]
-pb66=resultsPCA6$rotation[, 1:5]
-
-PCA2B2 = pb22 %*% solve(t(pb22) %*% pb22) %*% t(pb22) - B %*% solve(t(B) %*% B) %*% t(B)
-PCA2B4 = pb44 %*% solve(t(pb44) %*% pb44) %*% t(pb44) - B %*% solve(t(B) %*% B) %*% t(B)
-PCA2B6 = pb66 %*% solve(t(pb66) %*% pb66) %*% t(pb66) - B %*% solve(t(B) %*% B) %*% t(B)
-
-
-
-pl2=simPls2$projection[, 1]
-pl4=simPls4$projection[, 1]
-pl6=simPls6$projection[, 1]
-
-PLB2 = pl2 %*% solve(t(pl2) %*% pl2) %*% t(pl2) - B %*% solve(t(B) %*% B) %*% t(B)
-PLB4 = pl4 %*% solve(t(pl4) %*% pl4) %*% t(pl4) - B %*% solve(t(B) %*% B) %*% t(B)
-PLB6 = pl6 %*% solve(t(pl6) %*% pl6) %*% t(pl6) - B %*% solve(t(B) %*% B) %*% t(B)
-
-
-
-a2 = W2[, 1:3]
-a4 = W4[, 1]
-a6 = W6[, 1]
-
-AS2 = a2 %*% solve(t(a2) %*% a2) %*% t(a2) - B %*% solve(t(B) %*% B) %*% t(B)
-AS4 = a4 %*% solve(t(a4) %*% a4) %*% t(a4) - B %*% solve(t(B) %*% B) %*% t(B)
-AS6 = a6 %*% solve(t(a6) %*% a6) %*% t(a6) - B %*% solve(t(B) %*% B) %*% t(B)
-
-gKDRB2 = g2data %*% solve(t(g2data) %*% g2data) %*% t(g2data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRB4 = g4data %*% solve(t(g4data) %*% g4data) %*% t(g4data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRB6 = g6data %*% solve(t(g6data) %*% g6data) %*% t(g6data) - B %*% solve(t(B) %*% B) %*% t(B)
-
-
-gKDRiB2 = gi2data %*% solve(t(gi2data) %*% gi2data) %*% t(gi2data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRiB4 = gi4data %*% solve(t(gi4data) %*% gi4data) %*% t(gi4data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRiB6 = gi6data %*% solve(t(gi6data) %*% gi6data) %*% t(gi6data) - B %*% solve(t(B) %*% B) %*% t(B)
-
-
-gKDRvB2 = gv2data %*% solve(t(gv2data) %*% gv2data) %*% t(gv2data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRvB4 = gv4data %*% solve(t(gv4data) %*% gv4data) %*% t(gv4data) - B %*% solve(t(B) %*% B) %*% t(B)
-gKDRvB6 = gv6data %*% solve(t(gv6data) %*% gv6data) %*% t(gv6data) - B %*% solve(t(B) %*% B) %*% t(B)
-
-
-p8=c(Frobenius_norm(PCAB2), Frobenius_norm(PCAB4), Frobenius_norm(PCAB6))
-p2=c(Frobenius_norm(PCA2B2), Frobenius_norm(PCA2B4), Frobenius_norm(PCA2B6))
-pl=c(Frobenius_norm(PLB2), Frobenius_norm(PLB4), Frobenius_norm(PLB6))
-acti=c(Frobenius_norm(AS2), Frobenius_norm(AS4), Frobenius_norm(AS6))
-g1=c(Frobenius_norm(gKDRB2), Frobenius_norm(gKDRB4), Frobenius_norm(gKDRB6))
-gi1=c(Frobenius_norm(gKDRiB2), Frobenius_norm(gKDRiB4), Frobenius_norm(gKDRiB6))
-gv1=c(Frobenius_norm(gKDRvB2), Frobenius_norm(gKDRvB4), Frobenius_norm(gKDRvB6))
-
-p8
-p2
-pl
-acti
-g1
-gi1
 gv1
+gv2
+gv3
+
 
 ```
+
+
+
+
+
 
 
 
